@@ -1,0 +1,5 @@
+ext {
+    modId = 'torch_burnout'
+    modName = 'TorchBurnout'
+    modrinthId = 'B5akNpX6'
+}
