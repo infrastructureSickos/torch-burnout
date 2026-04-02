@@ -34,6 +34,7 @@ import java.util.Random;
 import net.minecraftforge.event.TickEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -54,12 +55,14 @@ public class TorchBurnoutEventHandler {
 
         for (int i = 0; i < CHECKS_PER_TICK; i++) {
             // Pick a random loaded chunk
-            Iterable<LevelChunk> chunks = level.getChunkSource().getLoadedChunks();
+            Iterable<ChunkHolder> chunks = level.getChunkSource().chunkMap.getChunks();
             // Collect one chunk by skipping a random offset — lightweight approximation
             int skip = RANDOM.nextInt(Math.max(1, countApprox(level)));
             LevelChunk chunk = null;
             int s = 0;
-            for (LevelChunk c : chunks) {
+            for (ChunkHolder h : chunks) {
+                LevelChunk c = h.getTickingChunk();
+                if (c == null) continue;
                 if (s++ >= skip) { chunk = c; break; }
             }
             if (chunk == null) continue;
@@ -110,7 +113,7 @@ public class TorchBurnoutEventHandler {
     /** Rough estimate of loaded chunk count to avoid materializing the full list. */
     private int countApprox(ServerLevel level) {
         int count = 0;
-        for (LevelChunk ignored : level.getChunkSource().getLoadedChunks()) {
+        for (ChunkHolder ignored : level.getChunkSource().chunkMap.getChunks()) {
             count++;
             if (count >= 500) break; // cap so we don't iterate thousands
         }
