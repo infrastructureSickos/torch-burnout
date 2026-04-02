@@ -33,9 +33,7 @@ import java.util.Random;
 
 import net.minecraftforge.event.TickEvent;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -43,40 +41,30 @@ public class TorchBurnoutEventHandler {
 
     private static final Random RANDOM = new Random();
 
-    // Number of random block positions to check per chunk per tick
-    // Vanilla uses 3 random ticks per chunk section per tick; we use 1 check
-    // across all loaded chunks sampled from a subset to keep it lightweight.
-    private static final int CHECKS_PER_TICK = 20;
+    // Number of random block positions to check per player per tick
+    private static final int CHECKS_PER_PLAYER = 5;
+    // Check radius around each player (in blocks)
+    private static final int CHECK_RADIUS = 128;
 
     @SubscribeEvent
     public void onLevelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
 
-        for (int i = 0; i < CHECKS_PER_TICK; i++) {
-            // Pick a random loaded chunk
-            Iterable<ChunkHolder> chunks = level.getChunkSource().chunkMap.getChunks();
-            // Collect one chunk by skipping a random offset — lightweight approximation
-            int skip = RANDOM.nextInt(Math.max(1, countApprox(level)));
-            LevelChunk chunk = null;
-            int s = 0;
-            for (ChunkHolder h : chunks) {
-                LevelChunk c = h.getTickingChunk();
-                if (c == null) continue;
-                if (s++ >= skip) { chunk = c; break; }
+        for (ServerPlayer player : level.players()) {
+            BlockPos playerPos = player.blockPosition();
+            for (int i = 0; i < CHECKS_PER_PLAYER; i++) {
+                int x = playerPos.getX() + RANDOM.nextInt(CHECK_RADIUS * 2) - CHECK_RADIUS;
+                int z = playerPos.getZ() + RANDOM.nextInt(CHECK_RADIUS * 2) - CHECK_RADIUS;
+                int y = level.getMinBuildHeight() + RANDOM.nextInt(level.getHeight());
+                BlockPos pos = new BlockPos(x, y, z);
+
+                if (!level.isLoaded(pos)) continue;
+                BlockState state = level.getBlockState(pos);
+                if (!isTorch(state)) continue;
+
+                tryBurnOut(level, pos);
             }
-            if (chunk == null) continue;
-
-            // Pick a random position within the chunk
-            int x = chunk.getPos().getMinBlockX() + RANDOM.nextInt(16);
-            int z = chunk.getPos().getMinBlockZ() + RANDOM.nextInt(16);
-            int y = level.getMinBuildHeight() + RANDOM.nextInt(level.getHeight());
-            BlockPos pos = new BlockPos(x, y, z);
-
-            BlockState state = level.getBlockState(pos);
-            if (!isTorch(state)) continue;
-
-            tryBurnOut(level, pos);
         }
     }
 
@@ -110,13 +98,4 @@ public class TorchBurnoutEventHandler {
         return state.is(Blocks.TORCH) || state.is(Blocks.WALL_TORCH);
     }
 
-    /** Rough estimate of loaded chunk count to avoid materializing the full list. */
-    private int countApprox(ServerLevel level) {
-        int count = 0;
-        for (ChunkHolder ignored : level.getChunkSource().chunkMap.getChunks()) {
-            count++;
-            if (count >= 500) break; // cap so we don't iterate thousands
-        }
-        return count;
-    }
 }
